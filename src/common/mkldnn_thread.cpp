@@ -18,6 +18,8 @@
 
 #if MKLDNN_THR == MKLDNN_THR_EIGEN
 #include <stdlib.h>
+#include <pthread.h>
+
 #include <mutex>
 
 namespace mkldnn {
@@ -36,6 +38,16 @@ Eigen::ThreadPoolInterface &eigenTp() {
             int nthr = (int)std::thread::hardware_concurrency();
             if (ont) nthr = atoi(ont);
             if (nthr < 1) nthr = 1;
+
+            // a workaround for IntelCaffe that sets sched mask
+            // for the master thread, which makes the whole Eigen
+            // thread pool belong to core #0
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            for (int i = 0; i < nthr; ++i)
+                CPU_SET(i, &cpuset);
+            sched_setaffinity(0, sizeof(cpuset), &cpuset);
+
             eigenTp_ = new Eigen::ThreadPool(nthr);
             initialized = true;
         }
