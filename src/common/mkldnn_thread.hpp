@@ -23,6 +23,7 @@
 #define MKLDNN_THR_SEQ 0
 #define MKLDNN_THR_OMP 1
 #define MKLDNN_THR_TBB 2
+#define MKLDNN_THR_EIGEN 3
 
 /* Ideally this condition below should never happen (if the library is built
  * using regular cmake). For the 3rd-party projects that build the library
@@ -63,6 +64,7 @@ inline void mkldnn_thr_barrier() {
 #include "tbb/task_arena.h"
 #include "tbb/parallel_for.h"
 #define MKLDNN_THR_SYNC 0
+namespace thr_ns = tbb;
 
 inline int mkldnn_get_max_threads()
 { return tbb::this_task_arena::max_concurrency(); }
@@ -71,6 +73,32 @@ inline int mkldnn_get_thread_num()
 { return tbb::this_task_arena::current_thread_index(); }
 inline int mkldnn_in_parallel() { return 0; }
 inline void mkldnn_thr_barrier() { assert(!"no barrier in TBB"); }
+
+#define PRAGMA_OMP(...)
+
+#elif MKLDNN_THR == MKLDNN_THR_EIGEN
+#include <thread>
+#include "unsupported/Eigen/CXX11/ThreadPool"
+
+#include "mkldnn.h"
+#define MKLDNN_THR_SYNC 0
+namespace thr_ns = mkldnn::impl;
+
+namespace mkldnn {
+namespace impl {
+// temporary workaround
+Eigen::ThreadPoolInterface MKLDNN_API &eigenTp();
+void MKLDNN_API parallel_for(int start, int end, std::function<void(int)> f);
+}
+}
+
+inline int mkldnn_get_max_threads()
+{ return mkldnn::impl::eigenTp().NumThreads(); }
+inline int mkldnn_get_num_threads() { return mkldnn_get_max_threads(); }
+inline int mkldnn_get_thread_num()
+{ return mkldnn::impl::eigenTp().CurrentThreadId(); }
+inline int mkldnn_in_parallel() { return mkldnn_get_thread_num() != -1; }
+inline void mkldnn_thr_barrier() { assert(!"no barrier in Eigen"); }
 
 #define PRAGMA_OMP(...)
 
