@@ -18,6 +18,7 @@
 
 #if MKLDNN_THR == MKLDNN_THR_EIGEN
 #include <stdlib.h>
+#include <unistd.h>
 #include <pthread.h>
 
 #include <mutex>
@@ -49,6 +50,19 @@ Eigen::ThreadPoolInterface &eigenTp() {
             sched_setaffinity(0, sizeof(cpuset), &cpuset);
 
             eigenTp_ = new Eigen::ThreadPool(nthr);
+
+            // a workaround to pin threads in Eigen thread pool to the cores
+            const char *etp = getenv("PIN_EIGEN_THREADS");
+            if (etp && etp[0] == '1') {
+                thr_ns::parallel_for(0, nthr, [&](int ithr) {
+                    sleep(2);
+                    cpu_set_t cpuset;
+                    CPU_ZERO(&cpuset);
+                    CPU_SET(ithr, &cpuset);
+                    pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+                });
+            }
+
             initialized = true;
         }
     }
