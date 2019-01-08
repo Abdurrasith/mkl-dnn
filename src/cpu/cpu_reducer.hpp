@@ -66,13 +66,13 @@ namespace cpu {
 struct reduce_balancer_t {
     reduce_balancer_t() { init(1, 1, 1, 1, 0); } /* trivial balance */
     reduce_balancer_t(int nthr, int job_size, int njobs, int reduction_size,
-            size_t max_buffer_size)
-    { init(nthr, job_size, njobs, reduction_size, max_buffer_size); }
+            size_t max_buffer_size, bool lock_free = false)
+    { init(nthr, job_size, njobs, reduction_size, max_buffer_size, lock_free); }
 
     reduce_balancer_t &init(int nthr, int job_size, int njobs,
-            int reduction_size, size_t max_buffer_size)
+            int reduction_size, size_t max_buffer_size, bool lock_free = false)
     {
-        syncable_ = mkldnn_thr_syncable();
+        allow_nthr_in_group_ = lock_free ? true : mkldnn_thr_syncable();
         nthr_ = nthr;
         job_size_ = job_size;
         njobs_ = njobs;
@@ -82,7 +82,7 @@ struct reduce_balancer_t {
         return *this;
     }
 
-    bool syncable_;
+    bool allow_nthr_in_group_;
     int nthr_;
     int job_size_, njobs_, reduction_size_;
 
@@ -182,7 +182,7 @@ struct cpu_reducer_t {
     /** initializes reducer.
      * Must be called from a single thread prior to actual usage */
     void init(const memory_tracking::grantor_t &scratchpad) const {
-        if (balancer().nthr_per_group_ == 1) return;
+        if (balancer().nthr_per_group_ == 1 || !mkldnn_thr_syncable()) return;
 
         auto bctx = scratchpad.template get<simple_barrier::ctx_t>(
                 memory_tracking::names::key_reducer_space_bctx);
@@ -217,6 +217,9 @@ struct cpu_reducer_t {
         reduce_nolock(ithr, dst, scratchpad);
     }
 
+    void reduce_nolock(int ithr, data_t *dst,
+            const memory_tracking::grantor_t &scratchpad) const;
+
     const reduce_balancer_t &balancer() const { return conf_.balancer_; }
 
 private:
@@ -230,9 +233,6 @@ private:
 
     const conf_t conf_;
     reducer_2d_driver_t<data_type> *drv_;
-
-    void reduce_nolock(int ithr, data_t *dst,
-            const memory_tracking::grantor_t &scratchpad) const;
 };
 
 template <impl::data_type_t data_type>
@@ -264,7 +264,7 @@ struct cpu_reducer_2d_t {
     /** initializes reducer.
      * Must be called from a single thread prior to actual usage */
     void init(const memory_tracking::grantor_t &scratchpad) const {
-        if (balancer().nthr_per_group_ == 1) return;
+        if (balancer().nthr_per_group_ == 1 || !mkldnn_thr_syncable()) return;
 
         auto bctx = scratchpad.template get<simple_barrier::ctx_t>(
                 memory_tracking::names::key_reducer_space_bctx);
@@ -291,6 +291,9 @@ struct cpu_reducer_2d_t {
         reduce_nolock(ithr, dst, scratchpad);
     }
 
+    void reduce_nolock(int ithr, data_t *dst,
+            const memory_tracking::grantor_t &scratchpad) const;
+
     const reduce_balancer_t &balancer() const { return conf_.balancer_; }
 
 private:
@@ -309,8 +312,6 @@ private:
     void reduce_block(const data_t* space_base, data_t *dst,
             int job, int start_y, int start_x,
             int ny_start, int nx_start, int ny_step, int nx_step) const;
-    void reduce_nolock(int ithr, data_t *dst,
-            const memory_tracking::grantor_t &scratchpad) const;
 };
 
 /** simple 1d accumulator: y[:] += x[:] */

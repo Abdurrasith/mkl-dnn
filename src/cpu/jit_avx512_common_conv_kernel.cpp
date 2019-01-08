@@ -5143,8 +5143,6 @@ void jit_avx512_common_conv_bwd_weights_kernel_f32::balance(
                 nthr_ic_b_ = nthr_ic_b;
             }
         }
-
-        if (!mkldnn_thr_syncable()) { assert(nthr_mb == 1); break; }
     }
 
     if (j.ver != ver_vnni && !mayiuse(avx512_mic)) {
@@ -5181,8 +5179,6 @@ void jit_avx512_common_conv_bwd_weights_kernel_f32::balance(
                     nthr_ic_b_ = nthr_ic_b;
                 }
             }
-
-            if (!mkldnn_thr_syncable()) { assert(nthr_mb == 1); break; }
         }
     }
 
@@ -5191,7 +5187,6 @@ void jit_avx512_common_conv_bwd_weights_kernel_f32::balance(
     nthr_ = nthr_mb_ * nthr_g_ * nthr_oc_b_ * nthr_ic_b_;
 
     assert(nthr_ <= max_threads);
-    assert(IMPLICATION(!mkldnn_thr_syncable(), nthr_mb_ == 1));
 }
 
 template struct  _jit_avx512_common_conv_fwd_kernel<Zmm>;
