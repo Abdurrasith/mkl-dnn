@@ -58,6 +58,7 @@
 #include "cpu/jit_uni_lrn.hpp"
 #include "cpu/ref_lrn.hpp"
 #include "cpu/jit_uni_batch_normalization.hpp"
+#include "cpu/jit_uni_tbb_batch_normalization.hpp"
 #include "cpu/ref_batch_normalization.hpp"
 #include "cpu/ncsp_batch_normalization.hpp"
 #include "cpu/nspc_batch_normalization.hpp"
@@ -316,6 +317,12 @@ static const pd_create_f cpu_impl_list[] = {
     INSTANCE(ref_lrn_fwd_t<bf16>),
     INSTANCE(ref_lrn_bwd_t<bf16>),
     /* batch normalization */
+#if MKLDNN_THR_SYNC == 0
+    INSTANCE(jit_uni_tbb_batch_normalization_fwd_t<avx512_common>),
+    INSTANCE(jit_uni_tbb_batch_normalization_fwd_t<avx2>),
+    INSTANCE(jit_uni_tbb_batch_normalization_bwd_t<avx512_common>),
+    INSTANCE(jit_uni_tbb_batch_normalization_bwd_t<avx2>),
+#endif
     INSTANCE(jit_uni_batch_normalization_fwd_t<avx512_common, f32>),
     INSTANCE(jit_uni_batch_normalization_bwd_t<avx512_common, f32>),
     INSTANCE(jit_uni_batch_normalization_fwd_t<avx512_common, bf16>),
