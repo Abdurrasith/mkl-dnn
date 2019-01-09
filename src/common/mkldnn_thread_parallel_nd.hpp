@@ -50,6 +50,9 @@ void parallel(int nthr, F f) {
 #elif MKLDNN_THR == MKLDNN_THR_TBB \
     || MKLDNN_THR == MKLDNN_THR_EIGEN \
     || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+#if MKLDNN_THR == MKLDNN_THR_TBB
+    mkldnn::impl::tbb_init();
+#endif
     if (nthr == 0)
         nthr = mkldnn_in_parallel() ? 1 :  mkldnn_get_max_threads();
     if (nthr == 1) { f(0, 1); return; }

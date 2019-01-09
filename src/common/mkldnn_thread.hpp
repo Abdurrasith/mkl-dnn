@@ -60,15 +60,24 @@ inline void mkldnn_thr_barrier() {
 #elif MKLDNN_THR == MKLDNN_THR_TBB
 #include "tbb/task_arena.h"
 #include "tbb/parallel_for.h"
+
+#include "mkldnn.h"
 #define MKLDNN_THR_SYNC 0
 namespace thr_ns = tbb;
 
+namespace mkldnn {
+namespace impl {
+// temporary workaround
+void MKLDNN_API tbb_init();
+}
+}
+
 inline int mkldnn_get_max_threads()
-{ return tbb::this_task_arena::max_concurrency(); }
+{ mkldnn::impl::tbb_init(); return tbb::this_task_arena::max_concurrency(); }
 inline int mkldnn_get_num_threads() { return mkldnn_get_max_threads(); }
 inline int mkldnn_get_thread_num()
-{ return tbb::this_task_arena::current_thread_index(); }
-inline int mkldnn_in_parallel() { return 0; }
+{ mkldnn::impl::tbb_init(); return tbb::this_task_arena::current_thread_index(); }
+inline int mkldnn_in_parallel() { mkldnn::impl::tbb_init(); return 0; }
 inline void mkldnn_thr_barrier() { assert(!"no barrier in TBB"); }
 
 #elif MKLDNN_THR == MKLDNN_THR_EIGEN \
