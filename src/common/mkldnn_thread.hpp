@@ -105,12 +105,17 @@ inline int mkldnn_get_max_threads()
 inline int mkldnn_get_num_threads() { return mkldnn_get_max_threads(); }
 inline int mkldnn_get_thread_num()
 { return mkldnn::impl::eigenTp().CurrentThreadId(); }
-inline int mkldnn_in_parallel() { return 0; }
+inline int mkldnn_in_parallel() { return mkldnn_get_thread_num() != -1; }
 inline void mkldnn_thr_barrier() { assert(!"no barrier in Eigen"); }
 
 namespace Eigen {
 template <typename F>
 void parallel_for(int start, int end, F f) {
+    if (end - start == 1) {
+        f(start);
+        return;
+    }
+
     Eigen::Barrier b(end - start);
     for (int i = start; i < end; ++i) {
         mkldnn::impl::eigenTp().Schedule([i, &f, &b]() { f(i); b.Notify(); });
