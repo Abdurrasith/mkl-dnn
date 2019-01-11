@@ -16,6 +16,10 @@
 
 #include "mkldnn_thread.hpp"
 
+#if MKLDNN_THR == MKLDNN_THR_TBB \
+                || MKLDNN_THR == MKLDNN_THR_EIGEN \
+                || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -66,7 +70,7 @@ static void maybe_pin_threads(const char *envvar) {
 #endif
 
 #if MKLDNN_THR == MKLDNN_THR_EIGEN \
-                   || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+                || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
 
 static extern_thread_pool_t *eigenTp_;
 
@@ -107,3 +111,6 @@ mkldnn_status_t mkldnn_set_tensorflow_thread_pool(void *tp) {
     return mkldnn::impl::status::success;
 }
 #endif
+
+#endif
+
