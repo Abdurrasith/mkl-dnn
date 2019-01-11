@@ -58,13 +58,20 @@ static void maybe_pin_threads(const char *envvar) {
     const char *etp = getenv(envvar);
     if (etp && etp[0] == '1') {
         const int nthr = get_nthr();
+#if MKLDNN_THR == MKLDNN_THR_TBB
+        thr_ns::parallel_for(0, nthr, [&](int ithr) { sleep(1); }, tbb::static_partitioner());
+#endif
         thr_ns::parallel_for(0, nthr, [&](int ithr) {
             sleep(2);
             cpu_set_t cpuset;
             CPU_ZERO(&cpuset);
             CPU_SET(ithr, &cpuset);
             pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
-        });
+        }
+#if MKLDNN_THR == MKLDNN_THR_TBB
+        , tbb::static_partitioner()
+#endif
+        );
     }
 }
 #endif
