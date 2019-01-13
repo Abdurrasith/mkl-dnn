@@ -100,12 +100,13 @@ using extern_thread_pool_t = tensorflow::thread::ThreadPool;
 #endif
 
 #define MKLDNN_THR_SYNC 0
-namespace thr_ns = Eigen;
+namespace thr_ns = mkldnn::impl;
 
 namespace mkldnn {
 namespace impl {
 // temporary workaround
 extern_thread_pool_t MKLDNN_API &eigenTp();
+void MKLDNN_API parallel_for(int start, int end, std::function<void(int)> f);
 }
 }
 
@@ -116,22 +117,6 @@ inline int mkldnn_get_thread_num()
 { return mkldnn::impl::eigenTp().CurrentThreadId(); }
 inline int mkldnn_in_parallel() { return mkldnn_get_thread_num() != -1; }
 inline void mkldnn_thr_barrier() { assert(!"no barrier in Eigen"); }
-
-namespace Eigen {
-template <typename F>
-void parallel_for(int start, int end, F f) {
-    if (end - start == 1) {
-        f(start);
-        return;
-    }
-
-    Eigen::Barrier b(end - start);
-    for (int i = start; i < end; ++i) {
-        mkldnn::impl::eigenTp().Schedule([i, &f, &b]() { f(i); b.Notify(); });
-    }
-    b.Wait();
-}
-} // namespace Eigen
 #endif
 
 /* MSVC still supports omp 2.0 only */
