@@ -58,15 +58,23 @@ static void maybe_pin_threads(const char *envvar) {
     const char *etp = getenv(envvar);
     if (etp && etp[0] == '1') {
         const int nthr = get_nthr();
+        thr_ns::parallel_for(0, nthr, [&](int ithr) { sleep(1); }
 #if MKLDNN_THR == MKLDNN_THR_TBB
-        thr_ns::parallel_for(0, nthr, [&](int ithr) { sleep(1); }, tbb::static_partitioner());
+            , tbb::static_partitioner()
 #endif
+        );
         thr_ns::parallel_for(0, nthr, [&](int ithr) {
+#if MKLDNN_THR == MKLDNN_THR_TBB
+            const int tid = ithr;
+#elif MKLDNN_THR == MKLDNN_THR_EIGEN
+            const int tid = mkldnn_get_thread_num();
+#endif
             sleep(2);
             cpu_set_t cpuset;
             CPU_ZERO(&cpuset);
-            CPU_SET(ithr, &cpuset);
+            CPU_SET(tid, &cpuset);
             pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+            sleep(1);
         }
 #if MKLDNN_THR == MKLDNN_THR_TBB
         , tbb::static_partitioner()
@@ -115,7 +123,8 @@ void parallel_for(int start, int end, std::function<void(int)> f) {
     if (start != 0 || end > nthr || mkldnn_in_parallel()) {
         Eigen::Barrier b(end - start);
         for (int i = start; i < end; ++i)
-            mkldnn::impl::eigenTp().Schedule([&, i]() { f(i); b.Notify(); });
+            mkldnn::impl::eigenTp().ScheduleWithHint(
+                    [&, i]() { f(i); b.Notify(); }, i, i + 1);
         b.Wait();
         return;
     }
@@ -128,7 +137,7 @@ void parallel_for(int start, int end, std::function<void(int)> f) {
 
     Eigen::Barrier b(nthr);
     for (int i = 0; i < nthr; ++i)
-        mkldnn::impl::eigenTp().Schedule([&, i]() {
+        mkldnn::impl::eigenTp().ScheduleWithHint([&, i]() {
             const int tid = mkldnn_get_thread_num();
             auto this_epoch = epoch;
             if (wm[tid].compare_exchange_weak(this_epoch, epoch + 1)) {
@@ -147,7 +156,7 @@ void parallel_for(int start, int end, std::function<void(int)> f) {
                 }
             }
             b.Notify();
-        });
+        }, i, i + 1);
     b.Wait();
 
     epoch += 1;
