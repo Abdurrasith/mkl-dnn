@@ -144,10 +144,10 @@ void parallel_for(int start, int end, std::function<void(int)> f) {
                 if (tid < end) f(tid);
                 else sched_yield();
             } else {
-                // same thread on the other work...
-
-                // find next free task
+                // same thread once more...
+                // find the next free task
                 for (int i = 0; i < nthr; ++i) {
+                    if (i == tid) continue;
                     auto this_epoch = epoch;
                     if (wm[i].compare_exchange_weak(this_epoch, epoch + 1)) {
                         if (i < end) f(i);
