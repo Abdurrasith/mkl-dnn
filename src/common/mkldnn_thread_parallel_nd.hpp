@@ -46,7 +46,9 @@ void parallel(int nthr, F f) {
     if (nthr == 1) { f(0, 1); return; }
 #   pragma omp parallel num_threads(nthr)
     f(mkldnn_get_thread_num(), mkldnn_get_num_threads());
-#elif MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN
+#elif MKLDNN_THR == MKLDNN_THR_TBB \
+    || MKLDNN_THR == MKLDNN_THR_EIGEN \
+    || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
     if (nthr == 1) { f(0, 1); return; }
     thr_ns::parallel_for(0, nthr, [&](int ithr) { f(ithr, nthr); });
 #else
@@ -159,7 +161,9 @@ void parallel_nd(Args &&...args) {
     for_nd(mkldnn_get_thread_num(), mkldnn_get_num_threads(),
             utils::forward<Args>(args)...);
 }
-#elif MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN
+#elif MKLDNN_THR == MKLDNN_THR_TBB \
+                  || MKLDNN_THR == MKLDNN_THR_EIGEN \
+                  || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
 
 // gcc 4.8 has a bug with passing parameter pack to lambdas.
 // So have to explicitly instantiate all the cases.
@@ -226,7 +230,9 @@ void parallel_nd_in_omp(Args &&...args) {
 #elif MKLDNN_THR == MKLDNN_THR_OMP
     for_nd(mkldnn_get_thread_num(), mkldnn_get_num_threads(),
             utils::forward<Args>(args)...);
-#elif MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN
+#elif MKLDNN_THR == MKLDNN_THR_TBB \
+    || MKLDNN_THR == MKLDNN_THR_EIGEN \
+    || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
     assert(!"unsupported parallel_nd_in_omp()");
 #else
 #error unknown MKLDNN_THR

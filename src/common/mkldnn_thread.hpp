@@ -24,6 +24,7 @@
 #define MKLDNN_THR_OMP 1
 #define MKLDNN_THR_TBB 2
 #define MKLDNN_THR_EIGEN 3
+#define MKLDNN_THR_TENSORFLOW 4
 
 /* Ideally this condition below should never happen (if the library is built
  * using regular cmake). For the 3rd-party projects that build the library
@@ -70,18 +71,32 @@ inline int mkldnn_get_thread_num()
 inline int mkldnn_in_parallel() { return 0; }
 inline void mkldnn_thr_barrier() { assert(!"no barrier in TBB"); }
 
-#elif MKLDNN_THR == MKLDNN_THR_EIGEN
-#include <thread>
-#include "unsupported/Eigen/CXX11/ThreadPool"
+#elif MKLDNN_THR == MKLDNN_THR_EIGEN \
+                   || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
 
 #include "mkldnn.h"
+
+#include "unsupported/Eigen/CXX11/ThreadPool"
+
+#if MKLDNN_THR == MKLDNN_THR_EIGEN
+using extern_thread_pool_t = Eigen::ThreadPoolInterface;
+#elif MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+#pragma push_macro("CHECK")
+#undef CHECK
+#include "tensorflow/core/lib/core/threadpool.h"
+#pragma pop_macro("CHECK")
+using extern_thread_pool_t = tensorflow::thread::ThreadPool;
+#else
+#error unknown MKLDNN_THR
+#endif
+
 #define MKLDNN_THR_SYNC 0
 namespace thr_ns = Eigen;
 
 namespace mkldnn {
 namespace impl {
 // temporary workaround
-Eigen::ThreadPoolInterface MKLDNN_API &eigenTp();
+extern_thread_pool_t MKLDNN_API &eigenTp();
 }
 }
 

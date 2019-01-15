@@ -16,19 +16,24 @@
 
 #include "mkldnn_thread.hpp"
 
+#if MKLDNN_THR == MKLDNN_THR_EIGEN \
+                   || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+
 #if MKLDNN_THR == MKLDNN_THR_EIGEN
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
 
 #include <mutex>
+#endif
 
 namespace mkldnn {
 namespace impl {
 
-Eigen::ThreadPoolInterface &eigenTp() {
-    static Eigen::ThreadPoolInterface *eigenTp_;
+static extern_thread_pool_t *eigenTp_;
 
+extern_thread_pool_t &eigenTp() {
+#if (MKLDNN_THR == MKLDNN_THR_EIGEN)
     if (eigenTp_ == nullptr) {
         static std::mutex mtx;
         std::lock_guard<std::mutex> lock(mtx);
@@ -66,11 +71,18 @@ Eigen::ThreadPoolInterface &eigenTp() {
             initialized = true;
         }
     }
-
+#endif
     return *eigenTp_;
 }
 
 }
 }
+
+#if MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+mkldnn_status_t mkldnn_set_tensorflow_thread_pool(void *tp) {
+    mkldnn::impl::eigenTp_ = (extern_thread_pool_t *)tp;
+    return mkldnn::impl::status::success;
+}
+#endif
 
 #endif
