@@ -1867,6 +1867,8 @@ mkldnn_status_t MKLDNN_API mkldnn_gemm_bf16bf16f32(const char *transa,
 
 /** @} */
 
+mkldnn_status_t MKLDNN_API mkldnn_set_tensorflow_thread_pool(void *tp);
+
 #ifdef __cplusplus
 }
 #endif

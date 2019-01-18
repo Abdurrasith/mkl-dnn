@@ -14,10 +14,14 @@
 * limitations under the License.
 *******************************************************************************/
 
+#include "mkldnn.h"
 #include "mkldnn_thread.hpp"
 
-#if MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN
+#if MKLDNN_THR == MKLDNN_THR_TBB \
+                || MKLDNN_THR == MKLDNN_THR_EIGEN \
+                || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
 
+#include <sys/syscall.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -29,6 +33,7 @@ namespace mkldnn {
 namespace impl {
 
 static int get_nthr() {
+#if MKLDNN_THR != MKLDNN_THR_TENSORFLOW
     static int nthr = 0;
     static std::once_flag initialized;
     std::call_once(initialized, [&]{
@@ -38,6 +43,9 @@ static int get_nthr() {
         if (nthr < 1) nthr = 1;
     });
     return nthr;
+#else
+    return mkldnn::impl::eigenTp().NumThreads();
+#endif
 }
 
 static void pin_thread(int tid) {
@@ -72,6 +80,10 @@ static void maybe_pin_threads(const char *envvar) {
 #endif
 }
 
+#if MKLDNN_THR == MKLDNN_THR_EIGEN || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+static extern_thread_pool_t *eigenTp_;
+
+#if MKLDNN_THR == MKLDNN_THR_EIGEN
 static void affinity_reset() {
     // a workaround for IntelCaffe that sets sched mask
     // for the master thread, which makes the whole Eigen
@@ -83,11 +95,10 @@ static void affinity_reset() {
         CPU_SET(i, &cpuset);
     sched_setaffinity(0, sizeof(cpuset), &cpuset);
 }
+#endif
 
+extern_thread_pool_t &eigenTp() {
 #if MKLDNN_THR == MKLDNN_THR_EIGEN
-Eigen::ThreadPoolInterface &eigenTp() {
-    static Eigen::ThreadPoolInterface *eigenTp_;
-
     if (eigenTp_ == nullptr) {
         static std::mutex mtx;
         std::lock_guard<std::mutex> lock(mtx);
@@ -105,7 +116,7 @@ Eigen::ThreadPoolInterface &eigenTp() {
             initialized = true;
         }
     }
-
+#endif
     return *eigenTp_;
 }
 
@@ -133,4 +144,18 @@ void tbb_init() {
 }
 }
 
-#endif // MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN
+#endif // MKLDNN_THR == MKLDNN_THR_TBB
+    // || MKLDNN_THR == MKLDNN_THR_EIGEN
+    // || MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+
+mkldnn_status_t mkldnn_set_tensorflow_thread_pool(void *tp) {
+#if MKLDNN_THR == MKLDNN_THR_TENSORFLOW
+    bool reset_affinity = (tp != mkldnn::impl::eigenTp_);
+    mkldnn::impl::eigenTp_ = (extern_thread_pool_t *)tp;
+    if (reset_affinity)
+        mkldnn::impl::maybe_pin_threads("PIN_TF_THREADS");
+    printf("@@@ MKLDNN_DEBUG: will use threadpool %p with %d threads\n",
+        tp, mkldnn::impl::eigenTp_->NumThreads());
+#endif
+    return mkldnn::impl::status::success;
+}
