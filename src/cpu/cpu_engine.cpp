@@ -407,6 +407,8 @@ void unpoison_outputs(primitive_t *p)
 
 status_t cpu_engine_t::submit(primitive_t *p, event_t *e,
         event_vector &prerequisites) {
+    timer::stop(timer::NON_MKLDNN);
+    timer::start(timer::MKLDNN);
     /* FIXME: this should live in primitive execute function... */
     if (mkldnn_verbose()->level) {
         double ms = get_msec();
@@ -419,6 +421,8 @@ status_t cpu_engine_t::submit(primitive_t *p, event_t *e,
     }
     if (msan_enabled)
         unpoison_outputs(p);
+    timer::stop(timer::MKLDNN);
+    timer::start(timer::NON_MKLDNN);
     return success;
 }
 

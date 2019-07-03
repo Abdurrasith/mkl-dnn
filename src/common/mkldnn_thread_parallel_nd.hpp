@@ -17,6 +17,8 @@
 #ifndef MKLDNN_THREAD_PARALLEL_ND_HPP
 #define MKLDNN_THREAD_PARALLEL_ND_HPP
 
+#include "naive_profiler.hpp"
+
 /* This header must be included by mkldnn_thread.hpp only */
 
 /* Functions:
@@ -38,30 +40,45 @@ namespace impl {
 /* general parallelization */
 template <typename F>
 void parallel(int nthr, F f) {
+    timer::start(timer::MKLDNN_PARALLEL_SUBMIT);
+
+#define f_wrapper(ithr, nthr) do { \
+    timer::stop(timer::NON_MKLDNN); \
+    timer::start(timer::MKLDNN_PARALLEL_THREAD); \
+    f(ithr, nthr); \
+    timer::stop(timer::MKLDNN_PARALLEL_THREAD); \
+    timer::start(timer::NON_MKLDNN); \
+} while (0)
+
 #if MKLDNN_THR == MKLDNN_THR_SEQ
     if (nthr == 0) nthr = mkldnn_get_max_threads();
     assert(nthr == 1);
-    f(0, 1);
+    f_wrapper(0, 1);
 #elif MKLDNN_THR == MKLDNN_THR_OMP
     if (nthr == 0) nthr = mkldnn_get_max_threads();
-    if (nthr == 1) { f(0, 1); return; }
+    if (nthr == 1) { f_wrapper(0, 1); goto out; }
 #   pragma omp parallel num_threads(nthr)
-    f(mkldnn_get_thread_num(), mkldnn_get_num_threads());
+    f_wrapper(mkldnn_get_thread_num(), mkldnn_get_num_threads());
 #elif MKLDNN_THR == MKLDNN_THR_TBB
     mkldnn::impl::tbb_init();
     if (nthr == 0)
         nthr = mkldnn_in_parallel() ? 1 :  mkldnn_get_max_threads();
-    if (nthr == 1) { f(0, 1); return; }
-    thr_ns::parallel_for(0, nthr, [&](int ithr) { f(ithr, nthr); },
+    if (nthr == 1) { f_wrapper(0, 1); goto out; }
+    thr_ns::parallel_for(0, nthr, [&](int ithr) { f_wrapper(ithr, nthr); },
             tbb::static_partitioner());
 #elif MKLDNN_THR == MKLDNN_THR_EIGEN
     if (nthr == 0)
         nthr = mkldnn_in_parallel() ? 1 :  mkldnn_get_max_threads();
-    if (nthr == 1) { f(0, 1); return; }
-    thr_ns::parallel_for(0, nthr, [&](int ithr) { f(ithr, nthr); });
+    if (nthr == 1) { f_wrapper(0, 1); goto out; }
+    thr_ns::parallel_for(0, nthr, [&](int ithr) { f_wrapper(ithr, nthr); });
 #else
 #error unknown MKLDNN_THR
 #endif
+
+#undef f_wrapper
+
+out:
+    timer::stop(timer::MKLDNN_PARALLEL_SUBMIT);
 }
 
 /* for_nd section */
