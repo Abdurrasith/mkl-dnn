@@ -16,12 +16,14 @@
 
 #include "mkldnn_thread.hpp"
 
-#if MKLDNN_THR == MKLDNN_THR_EIGEN
+#if MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
 
 #include <mutex>
+#include <thread>
 
 namespace mkldnn {
 namespace impl {
@@ -56,6 +58,7 @@ static void maybe_pin_threads(const char *envvar) {
     printf("@@@ MKLDNN_DEBUG: pinning threads...\n");
 
     const int nthr = get_nthr();
+#if MKLDNN_THR == MKLDNN_THR_TENSORFLOW || MKLDNN_THR == MKLDNN_THR_EIGEN
     Eigen::Barrier b(nthr);
     auto pinner = [&b](int thr) {
         b.Notify();
@@ -63,6 +66,10 @@ static void maybe_pin_threads(const char *envvar) {
         pin_thread(mkldnn_get_thread_num());
     };
     thr_ns::parallel_for(0, nthr, pinner);
+#else
+    tbb::parallel_for(0, nthr, [&](int ithr) { sleep(2); pin_thread(ithr); },
+            tbb::static_partitioner());
+#endif
 }
 
 static void affinity_reset() {
@@ -77,6 +84,7 @@ static void affinity_reset() {
     sched_setaffinity(0, sizeof(cpuset), &cpuset);
 }
 
+#if MKLDNN_THR == MKLDNN_THR_EIGEN
 Eigen::ThreadPoolInterface &eigenTp() {
     static Eigen::ThreadPoolInterface *eigenTp_;
 
@@ -115,8 +123,14 @@ void parallel_for(int start, int end, std::function<void(int)> f) {
         tp.ScheduleWithHint([i, &b, &f]{ f(i); b.Notify(); }, i, i + 1);
     b.Wait();
 }
-
+#elif MKLDNN_THR == MKLDNN_THR_TBB
+void tbb_init() {
+    static std::once_flag initialized;
+    std::call_once(initialized, []{ maybe_pin_threads("PIN_TBB_THREADS"); });
 }
-}
-
 #endif
+
+}
+}
+
+#endif // MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN

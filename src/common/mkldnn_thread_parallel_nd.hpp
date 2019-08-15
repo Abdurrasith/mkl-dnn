@@ -47,7 +47,14 @@ void parallel(int nthr, F f) {
     if (nthr == 1) { f(0, 1); return; }
 #   pragma omp parallel num_threads(nthr)
     f(mkldnn_get_thread_num(), mkldnn_get_num_threads());
-#elif MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN
+#elif MKLDNN_THR == MKLDNN_THR_TBB
+    mkldnn::impl::tbb_init();
+    if (nthr == 0)
+        nthr = mkldnn_in_parallel() ? 1 :  mkldnn_get_max_threads();
+    if (nthr == 1) { f(0, 1); return; }
+    thr_ns::parallel_for(0, nthr, [&](int ithr) { f(ithr, nthr); },
+            tbb::static_partitioner());
+#elif MKLDNN_THR == MKLDNN_THR_EIGEN
     if (nthr == 0)
         nthr = mkldnn_in_parallel() ? 1 :  mkldnn_get_max_threads();
     if (nthr == 1) { f(0, 1); return; }
@@ -173,7 +180,93 @@ void parallel_nd(Args &&...args) {
         for_nd(ithr, nthr, utils::forward<Args>(args)...);
     }
 }
-#elif MKLDNN_THR == MKLDNN_THR_TBB || MKLDNN_THR == MKLDNN_THR_EIGEN
+#elif MKLDNN_THR == MKLDNN_THR_TBB
+// gcc 4.8 has a bug with passing parameter pack to lambdas.
+// So have to explicitly instantiate all the cases.
+
+template <typename T0, typename F>
+void parallel_nd(const T0 &D0, F f) {
+    if (mkldnn_in_parallel()) {
+        for_nd(0, 1, D0, f);
+        return;
+    }
+
+    const int nthr = mkldnn_get_max_threads();
+    thr_ns::parallel_for(0, nthr, [&](int ithr) {
+        for_nd(ithr, nthr, D0, f);
+    }, tbb::static_partitioner());
+}
+
+template <typename T0, typename T1, typename F>
+void parallel_nd(const T0 &D0, const T1 &D1, F f) {
+    if (mkldnn_in_parallel()) {
+        for_nd(0, 1, D0, D1, f);
+        return;
+    }
+
+    const int nthr = mkldnn_get_max_threads();
+    thr_ns::parallel_for(0, nthr, [&](int ithr) {
+        for_nd(ithr, nthr, D0, D1, f);
+    }, tbb::static_partitioner());
+}
+
+template <typename T0, typename T1, typename T2, typename F>
+void parallel_nd(const T0 &D0, const T1 &D1, const T2 &D2, F f) {
+    if (mkldnn_in_parallel()) {
+        for_nd(0, 1, D0, D1, D2, f);
+        return;
+    }
+
+    const int nthr = mkldnn_get_max_threads();
+    thr_ns::parallel_for(0, nthr, [&](int ithr) {
+        for_nd(ithr, nthr, D0, D1, D2, f);
+    }, tbb::static_partitioner());
+}
+
+template <typename T0, typename T1, typename T2, typename T3, typename F>
+void parallel_nd(const T0 &D0, const T1 &D1, const T2 &D2, const T3 &D3, F f) {
+    if (mkldnn_in_parallel()) {
+        for_nd(0, 1, D0, D1, D2, D3, f);
+        return;
+    }
+
+    const int nthr = mkldnn_get_max_threads();
+    thr_ns::parallel_for(0, nthr, [&](int ithr) {
+        for_nd(ithr, nthr, D0, D1, D2, D3, f);
+    }, tbb::static_partitioner());
+}
+
+template <typename T0, typename T1, typename T2, typename T3, typename T4,
+         typename F>
+void parallel_nd(const T0 &D0, const T1 &D1, const T2 &D2, const T3 &D3,
+        const T4 &D4, F f) {
+    if (mkldnn_in_parallel()) {
+        for_nd(0, 1, D0, D1, D2, D3, D4, f);
+        return;
+    }
+
+    const int nthr = mkldnn_get_max_threads();
+    thr_ns::parallel_for(0, nthr, [&](int ithr) {
+        for_nd(ithr, nthr, D0, D1, D2, D3, D4, f);
+    }, tbb::static_partitioner());
+}
+
+template <typename T0, typename T1, typename T2, typename T3, typename T4,
+         typename T5, typename F>
+void parallel_nd(const T0 &D0, const T1 &D1, const T2 &D2, const T3 &D3,
+        const T4 &D4, const T5 &D5, F f) {
+    if (mkldnn_in_parallel()) {
+        for_nd(0, 1, D0, D1, D2, D3, D4, D5, f);
+        return;
+    }
+
+    const int nthr = mkldnn_get_max_threads();
+    thr_ns::parallel_for(0, nthr, [&](int ithr) {
+        for_nd(ithr, nthr, D0, D1, D2, D3, D4, D5, f);
+    }, tbb::static_partitioner());
+}
+
+#elif MKLDNN_THR == MKLDNN_THR_EIGEN
 
 // gcc 4.8 has a bug with passing parameter pack to lambdas.
 // So have to explicitly instantiate all the cases.
