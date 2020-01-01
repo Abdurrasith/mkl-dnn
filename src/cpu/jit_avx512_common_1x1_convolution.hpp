@@ -158,7 +158,7 @@ struct jit_avx512_common_1x1_convolution_fwd_t : public primitive_impl_t {
             const auto &src_md = dst_md_;
             const memory_desc_wrapper src_d(src_md);
             const auto nthr = dnnl_get_max_threads();
-            auto l2_cache = get_cache_size(2, true) * nthr;
+            auto l2_cache = get_per_core_cache_size(2) * nthr;
 
             bool ok = true && is_fwd()
                     && (attr_1x1.post_ops_.find(primitive_kind::sum) == -1)
