@@ -15,6 +15,7 @@ DNNL supports the following build-time options.
 | DNNL_ENABLE_JIT_PROFILING   | **ON**, OFF                         | Enables integration with Intel(R) VTune(TM) Amplifier
 | DNNL_ENABLE_PRIMITIVE_CACHE | ON, **OFF**                         | Enables primitive cache
 | DNNL_ENABLE_MAX_CPU_ISA     | **ON**, OFF                         | Enables controlling CPU dispatcher at run-time
+| DNNL_TEST_THREADPOOL_IMPL   | **STANDALONE**, TBB, EIGEN          | Specifies which threadpool implementation should be used for testing
 
 All other building options that can be found in CMake files are dedicated for
 the development/debug purposes and are subject to change without any notice.
@@ -97,6 +98,26 @@ limitations if built with Intel TBB.
 Functional limitations:
 * Winograd convolution algorithm is not supported for fp32 backward
   by data and backward by weights propagation.
+
+#### Threadpool
+To build DNNL with support for threadpool threading, set `DNNL_CPU_RUNTIME` to
+`THREADPOOL`
+
+~~~sh
+$ cmake -DDNNL_CPU_RUNTIME=THREADPOOL ..
+~~~
+
+The `DNNL_TEST_THREADPOOL_IMPL` CMake variable controls which of the three
+threadpool implementations would be used for testing: `STANDALONE`, `TBB`, or
+`EIGEN`. The latter two require also passing `TBBROOT` or `Eigen3_DIR` paths
+to CMake. For example:
+
+~~~sh
+$ cmake -DDNNL_CPU_RUNTIME=THREADPOOL -DDNNL_TEST_THREADPOOL_IMPL=EIGEN -DEigen3_DIR=/path/to/eigen/share/eigen3/cmake ..
+~~~
+
+Threadpool threading support is experimental and has same limitations as TBB
+plus more.
 
 ## GPU Options
 Intel Processor Graphics is supported by DNNLs GPU engine. GPU engine

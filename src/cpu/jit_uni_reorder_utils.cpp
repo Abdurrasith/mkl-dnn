@@ -18,6 +18,7 @@
 
 #include "c_types_map.hpp"
 #include "dnnl_debug.h"
+#include "dnnl_thread.hpp"
 #include "memory_desc_wrapper.hpp"
 #include "nstl.hpp"
 #include "type_helpers.hpp"
@@ -190,6 +191,7 @@ status_t prb_init(prb_t &p, const memory_desc_t &imd, const memory_desc_t &omd,
         }
     }
     p.ndims = ndims;
+    p.nthr = dnnl_get_max_threads();
 
     p.ioff = memory_desc_wrapper(imd).offset0();
     p.ooff = memory_desc_wrapper(omd).offset0();

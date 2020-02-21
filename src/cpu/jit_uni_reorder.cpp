@@ -957,8 +957,8 @@ static void prb_thread_kernel_balance(tr::prb_t &prb, int &ndims_ker_max) {
 
     /* sz_drv_min is the minimal size for the parallel
      * driver required for good parallelization */
-    const size_t sz_drv_min = nstl::min<size_t>(
-            16 * dnnl_get_max_threads(), utils::div_up(sz_total, 1024));
+    const size_t sz_drv_min
+            = nstl::min<size_t>(16 * prb.nthr, utils::div_up(sz_total, 1024));
 
     /* kdims -- # of dimensions processed by a kernel
      * sz_ker_cur -- product of the dimension processed by a kernel
@@ -1198,7 +1198,7 @@ struct jit_uni_reorder_t : public primitive_impl_t {
         if (ndims - ndims_ker == 0) {
             omp_driver_0d(ndims_ker, in, out, scale);
         } else {
-            parallel(0, [&](const int ithr, const int nthr) {
+            parallel(pd()->prb_.nthr, [&](const int ithr, const int nthr) {
                 switch (ndims - ndims_ker) {
                     case 1:
                         omp_driver_1d(ithr, nthr, ndims_ker, in, out, scale);

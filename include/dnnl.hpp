@@ -33,6 +33,10 @@
 
 #include "dnnl.h"
 
+#if DNNL_CPU_THREADING_RUNTIME == DNNL_RUNTIME_THREADPOOL
+#include "dnnl_threadpool_iface.hpp"
+#endif
+
 #if DNNL_GPU_RUNTIME == DNNL_RUNTIME_OCL
 #include <CL/cl.h>
 #endif
@@ -955,6 +959,14 @@ private:
     }
 };
 
+/// Converts engine kind enum value from C++ API to C API type.
+///
+/// @param kind C++ API engine kind enum value.
+/// @returns Corresponding C API engine kind enum value.
+inline dnnl_engine_kind_t convert_to_c(engine::kind kind) {
+    return static_cast<dnnl_engine_kind_t>(kind);
+}
+
 /// @} dnnl_api_engine
 
 /// @addtogroup dnnl_api_stream Stream
@@ -972,7 +984,58 @@ struct handle_traits<dnnl_stream_t> {
         return dnnl_stream_destroy(p);
     }
 };
+template <>
+struct handle_traits<dnnl_stream_attr_t> {
+    static dnnl_status_t destructor(dnnl_stream_attr_t p) {
+        return dnnl_stream_attr_destroy(p);
+    }
+};
 /// @endcond
+
+/// A container for stream attributes.
+struct stream_attr : public handle<dnnl_stream_attr_t> {
+    using handle::handle;
+
+    /// Constructs default (empty) stream attributes.
+    stream_attr() = default;
+
+    /// Constructs stream attributes for a stream that runs on an engine of a
+    /// particular kind.
+    ///
+    /// @param kind Target engine kind.
+    stream_attr(engine::kind kind) {
+        dnnl_stream_attr_t attr;
+        error::wrap_c_api(dnnl_stream_attr_create(&attr, convert_to_c(kind)),
+                "could not create stream attributes");
+        reset(attr);
+    }
+
+#if DNNL_CPU_THREADING_RUNTIME == DNNL_RUNTIME_THREADPOOL
+    /// Sets the threadpool attribute. Always throws unless DNNL is built with
+    /// threadpool runtime.
+    ///
+    /// @sa @ref dev_guide_threadpool
+    ///
+    /// @param threadpool A pointer to an instance of a class that implements
+    ///     the dnnl::threadpool_iface interface.
+    void set_threadpool(threadpool_iface *threadpool) {
+        error::wrap_c_api(dnnl_stream_attr_set_threadpool(get(), threadpool),
+                "could not set stream threadpool attribute");
+    }
+
+    /// Returns the threadpool attribute. Always throws unless DNNL is built
+    /// with threadpool runtime.
+    ///
+    /// @sa @ref dev_guide_threadpool
+    ///
+    threadpool_iface *get_threadpool() {
+        threadpool_iface *tp;
+        error::wrap_c_api(dnnl_stream_attr_get_threadpool(get(), (void **)&tp),
+                "could not set stream threadpool attribute");
+        return tp;
+    }
+#endif
+};
 
 /// An execution stream.
 struct stream : public handle<dnnl_stream_t> {
@@ -1000,10 +1063,13 @@ struct stream : public handle<dnnl_stream_t> {
     ///
     /// @param engine Engine to create the stream on.
     /// @param flags Flags controlling stream behavior.
-    stream(const engine &engine, flags flags = flags::default_flags) {
+    /// @param attr Stream attributes.
+    stream(const engine &engine, flags flags = flags::default_flags,
+            stream_attr attr = stream_attr()) {
         dnnl_stream_t stream;
-        error::wrap_c_api(dnnl_stream_create(&stream, engine.get(),
-                                  static_cast<dnnl_stream_flags_t>(flags)),
+        error::wrap_c_api(dnnl_stream_create_v2(&stream, engine.get(),
+                                  static_cast<dnnl_stream_flags_t>(flags),
+                                  attr.get(true)),
                 "could not create a stream");
         reset(stream);
     }
@@ -1960,8 +2026,8 @@ struct memory : public handle<dnnl_memory_t> {
     ///
     /// This function may write zero values to the memory specified by the @p
     /// handle if the memory object has a zero padding area. This may be time
-    /// consuming and happens each time this function is called. Furthermore,
-    /// it is performed using an internal service stream in a blocking manner.
+    /// consuming and happens each time this function is called.  The
+    /// operation is always blocking and the stream parameter is a hint.
     ///
     /// @note
     ///     The zero padding is required by memory objects created with
@@ -1981,8 +2047,10 @@ struct memory : public handle<dnnl_memory_t> {
     ///
     /// @param handle Output data handle. For the CPU engine, the data handle
     ///     is a pointer to the actual data. For OpenCL it is a cl_mem.
-    void set_data_handle(void *handle) const {
-        error::wrap_c_api(dnnl_memory_set_data_handle(get(), handle),
+    /// @param s Stream to use to execute padding.
+    void set_data_handle(void *handle, stream s = stream()) const {
+        error::wrap_c_api(
+                dnnl_memory_set_data_handle_v2(get(), handle, s.get(true)),
                 "could not set native handle of a memory object");
     }
 
@@ -10424,6 +10492,36 @@ inline status gemm_s8s8s32(char transa, char transb, char offsetc, dnnl_dim_t M,
     return static_cast<status>(dnnl_gemm_s8s8s32(transa, transb, offsetc, M, N,
             K, alpha, A, lda, ao, B, ldb, bo, beta, C, ldc, co));
 }
+
+#if DNNL_CPU_RUNTIME == DNNL_RUNTIME_THREADPOOL
+/// @copydoc dnnl_sgemm_tp()
+inline status sgemm(char transa, char transb, dnnl_dim_t M, dnnl_dim_t N,
+        dnnl_dim_t K, float alpha, const float *A, dnnl_dim_t lda,
+        const float *B, dnnl_dim_t ldb, float beta, float *C, dnnl_dim_t ldc,
+        dnnl::threadpool_iface *tp) {
+    return static_cast<status>(dnnl_sgemm_tp(
+            transa, transb, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc, tp));
+}
+/// @copydoc dnnl_gemm_u8s8s32_tp()
+inline status gemm_u8s8s32(char transa, char transb, char offsetc, dnnl_dim_t M,
+        dnnl_dim_t N, dnnl_dim_t K, float alpha, const uint8_t *A,
+        dnnl_dim_t lda, uint8_t ao, const int8_t *B, dnnl_dim_t ldb, int8_t bo,
+        float beta, int32_t *C, dnnl_dim_t ldc, const int32_t *co,
+        dnnl::threadpool_iface *tp) {
+    return static_cast<status>(dnnl_gemm_u8s8s32_tp(transa, transb, offsetc, M,
+            N, K, alpha, A, lda, ao, B, ldb, bo, beta, C, ldc, co, tp));
+}
+
+/// @copydoc dnnl_gemm_s8s8s32_tp()
+inline status gemm_s8s8s32(char transa, char transb, char offsetc, dnnl_dim_t M,
+        dnnl_dim_t N, dnnl_dim_t K, float alpha, const int8_t *A,
+        dnnl_dim_t lda, int8_t ao, const int8_t *B, dnnl_dim_t ldb, int8_t bo,
+        float beta, int32_t *C, dnnl_dim_t ldc, const int32_t *co,
+        dnnl::threadpool_iface *tp) {
+    return static_cast<status>(dnnl_gemm_s8s8s32_tp(transa, transb, offsetc, M,
+            N, K, alpha, A, lda, ao, B, ldb, bo, beta, C, ldc, co, tp));
+}
+#endif
 
 /// @} dnnl_api_blas
 

@@ -44,6 +44,7 @@ enum class scale_type_t { NONE, COMMON, MANY };
 struct prb_t {
     data_type_t itype;
     data_type_t otype;
+    int nthr;
     int ndims;
     node_t nodes[max_ndims];
     ptrdiff_t ioff;

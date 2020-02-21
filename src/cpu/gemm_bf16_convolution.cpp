@@ -38,14 +38,16 @@ using namespace dnnl::impl::cpu::bf16_support;
 // when one lambda  function is delcared whithin the other one
 void store_bfloat16_in_parallel(bfloat16_t *output_data, const float *acc_data,
         size_t parallel_work, size_t parallel_work_size, bool do_in_parallel) {
-    parallel(do_in_parallel ? 0 : 1, [&](const int ithr, const int nthr) {
-        size_t start = 0, end = 0;
-        balance211(parallel_work, nthr, ithr, start, end);
-        if (start < end)
-            cvt_float_to_bfloat16(&output_data[start * parallel_work_size],
-                    &acc_data[start * parallel_work_size],
-                    (end - start) * parallel_work_size);
-    });
+    parallel(do_in_parallel ? 0 : 1,
+            [&](const int ithr, const int nthr) {
+                size_t start = 0, end = 0;
+                balance211(parallel_work, nthr, ithr, start, end);
+                if (start < end)
+                    cvt_float_to_bfloat16(
+                            &output_data[start * parallel_work_size],
+                            &acc_data[start * parallel_work_size],
+                            (end - start) * parallel_work_size);
+            });
 }
 
 template <data_type_t dst_data_type>
@@ -254,24 +256,25 @@ void gemm_bf16_convolution_fwd_t<dst_data_type>::pp_ker_t::operator()(
     assert(ker_);
     if (len == 0) return;
 
-    parallel(do_parallel ? 0 : 1, [&](const int ithr, const int nthr) {
-        size_t start_oc = 0, end_oc = 0;
-        balance211(OC_, nthr, ithr, start_oc, end_oc);
-        if (end_oc > start_oc) {
-            ker_args args;
-            args.acc = acc + start_oc * acc_stride_in_elements;
-            args.dst = dst + start_oc * dst_stride_in_elements;
-            args.bias = bias + start_oc;
-            args.sum_scale = sum_scale;
-            args.dst_stride_in_bytes
-                    = dst_stride_in_elements * sizeof(dst_data_t);
-            args.acc_stride_in_bytes
-                    = acc_stride_in_elements * sizeof(acc_data_t);
-            args.spatial_length = len;
-            args.oc_work = end_oc - start_oc;
-            ker_(&args);
-        }
-    });
+    parallel(do_parallel ? 0 : 1,
+            [&](const int ithr, const int nthr) {
+                size_t start_oc = 0, end_oc = 0;
+                balance211(OC_, nthr, ithr, start_oc, end_oc);
+                if (end_oc > start_oc) {
+                    ker_args args;
+                    args.acc = acc + start_oc * acc_stride_in_elements;
+                    args.dst = dst + start_oc * dst_stride_in_elements;
+                    args.bias = bias + start_oc;
+                    args.sum_scale = sum_scale;
+                    args.dst_stride_in_bytes
+                            = dst_stride_in_elements * sizeof(dst_data_t);
+                    args.acc_stride_in_bytes
+                            = acc_stride_in_elements * sizeof(acc_data_t);
+                    args.spatial_length = len;
+                    args.oc_work = end_oc - start_oc;
+                    ker_(&args);
+                }
+            });
 }
 
 template <data_type_t dst_data_type>
